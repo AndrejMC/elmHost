@@ -312,7 +312,7 @@ string2ListList str =
     if String.length str < 10 then
         [ List.map str2int (String.split "" str) ]
     else
-        List.map str2int (String.split "" (String.slice 0 9 str)) :: string2ListList (String.slice 8 -1 str)
+        List.map str2int (String.split "" (String.slice 0 9 str)) :: string2ListList (String.slice 9 (String.length str) str)
 
 
 str2int : String -> Int
