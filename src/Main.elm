@@ -66,12 +66,10 @@ view sudoku =
                   )
                 ]
             ]
-            [ Html.text
-                (if sudoku.correct then
-                    "SOLUTION CORRECT"
-                 else
-                    "SOLUTION INCORECT"
-                )
+            [ if sudoku.correct then
+                Html.p [ style [ ( "color", "green" ) ] ] [ text "SOLUTION CORRECT" ]
+              else
+                Html.p [ style [ ( "color", "red" ) ] ] [ text "SOLUTION INCORRECT" ]
             ]
         ]
 
@@ -293,7 +291,7 @@ sudokuSquareInput code sq =
 
 
 main =
-    Html.program { init = ( sudoku2Model sudoku, Cmd.none ), view = view, update = update, subscriptions = subscriptions }
+    Html.program { init = ( sudoku2Model (string2ListList sudoku), Cmd.none ), view = view, update = update, subscriptions = subscriptions }
 
 
 
@@ -306,7 +304,25 @@ subscriptions model =
 
 
 
--------------------------------------------------------------------------------------------------
+-----------------------------------------parse string to model-----------------------------------
+
+
+string2ListList : String -> List (List Int)
+string2ListList str =
+    if String.length str < 10 then
+        [ List.map str2int (String.split "" str) ]
+    else
+        List.map str2int (String.split "" (String.slice 0 9 str)) :: string2ListList (String.slice 8 -1 str)
+
+
+str2int : String -> Int
+str2int str =
+    case String.toInt str of
+        Ok n ->
+            n
+
+        _ ->
+            0
 
 
 sudoku2Model : List (List Int) -> Sudoku
@@ -328,13 +344,4 @@ int2Square int =
 
 
 sudoku =
-    [ [ 0, 0, 3, 0, 2, 0, 6, 0, 0 ]
-    , [ 9, 0, 0, 3, 0, 5, 0, 0, 1 ]
-    , [ 0, 0, 1, 8, 0, 6, 4, 0, 0 ]
-    , [ 0, 0, 8, 1, 0, 2, 9, 0, 0 ]
-    , [ 7, 0, 0, 0, 0, 0, 0, 0, 8 ]
-    , [ 0, 0, 6, 7, 0, 8, 2, 0, 0 ]
-    , [ 0, 0, 2, 6, 0, 9, 5, 0, 0 ]
-    , [ 8, 0, 0, 2, 0, 3, 0, 0, 9 ]
-    , [ 0, 0, 5, 0, 1, 0, 3, 0, 0 ]
-    ]
+    "010000000060000820002018000030080002000052080000401500000140000070000000120300006"
