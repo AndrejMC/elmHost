@@ -145,16 +145,17 @@ checkRows s =
 
 checkCols : List Row -> Bool
 checkCols s =
-    True
+    checkRows (rotate s)
 
 
 checkBoxes : List Row -> Bool
 checkBoxes s =
-    True
+    checkRows (rotate2squares s)
 
 
 unique : List Square -> List Int -> Bool
 unique sqList intList =
+    -- preveri ce so v seznamu sami unikati
     case sqList of
         [] ->
             True
@@ -166,6 +167,31 @@ unique sqList intList =
                 False
             else
                 unique t (h.number :: intList)
+
+
+rotate : List Row -> List Row
+rotate list =
+    -- rotira sudoku iz zapisa po vrsticah na zapis po stolpcih
+    case list of
+        [ h1 :: t1, h2 :: t2, h3 :: t3, h4 :: t4, h5 :: t5, h6 :: t6, h7 :: t7, h8 :: t8, h9 :: t9 ] ->
+            [ h1, h2, h3, h4, h5, h6, h7, h8, h9 ] :: rotate [ t1, t2, t3, t4, t5, t6, t7, t8, t9 ]
+
+        _ ->
+            list
+
+
+rotate2squares : List Row -> List Row
+rotate2squares list =
+    -- rotira sudoku iz zapisa po vrsticah v zapis po kvadratih
+    case list of
+        (h1 :: h2 :: h3 :: t1) :: (h4 :: h5 :: h6 :: t2) :: (h7 :: h8 :: h9 :: t3) :: t ->
+            [ h1, h2, h3, h4, h5, h6, h7, h8, h9 ] :: rotate2squares (t1 :: t2 :: t3 :: t)
+
+        [] :: [] :: [] :: t ->
+            rotate2squares t
+
+        _ ->
+            list
 
 
 
