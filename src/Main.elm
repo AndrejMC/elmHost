@@ -30,7 +30,10 @@ type alias Row =
 
 type alias Sudoku =
     -- Sudoku mreza
-    List Row
+    { sudoku : List Row
+    , checked : Bool
+    , correct : Bool
+    }
 
 
 
@@ -40,6 +43,7 @@ type alias Sudoku =
 type Msg
     = Click Int Int
     | Presses Char
+    | Check
 
 
 
@@ -48,7 +52,28 @@ type Msg
 
 view : Sudoku -> Html Msg
 view sudoku =
-    css :: List.indexedMap viewRow sudoku |> Html.div []
+    Html.div []
+        [ css
+        , List.indexedMap viewRow sudoku.sudoku |> Html.div [ style [ ( "width", "800px" ) ] ]
+        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Check ] [ text "CHECK SOLUTION" ]
+        , Html.div
+            [ style
+                [ ( "display"
+                  , if sudoku.checked then
+                        "block"
+                    else
+                        "none"
+                  )
+                ]
+            ]
+            [ Html.text
+                (if sudoku.correct then
+                    "SOLUTION CORRECT"
+                 else
+                    "SOLUTION INCORECT"
+                )
+            ]
+        ]
 
 
 viewRow y row =
@@ -87,13 +112,73 @@ update msg sudoku =
         Presses code ->
             ( sudokuInput code sudoku, Cmd.none )
 
+        Check ->
+            ( { sudoku | checked = True, correct = checkSudoku sudoku.sudoku }, Cmd.none )
 
 
--------------------------------------------------------------------------------------------------
+
+------------------------------------------CHECK_SOLUTION------------------------------------------
+
+
+checkSudoku : List Row -> Bool
+checkSudoku s =
+    case ( checkRows s, checkCols s, checkBoxes s ) of
+        ( True, True, True ) ->
+            True
+
+        _ ->
+            False
+
+
+checkRows : List Row -> Bool
+checkRows s =
+    case s of
+        [] ->
+            True
+
+        h :: t ->
+            if unique h [] then
+                checkRows t
+            else
+                False
+
+
+checkCols : List Row -> Bool
+checkCols s =
+    True
+
+
+checkBoxes : List Row -> Bool
+checkBoxes s =
+    True
+
+
+unique : List Square -> List Int -> Bool
+unique sqList intList =
+    case sqList of
+        [] ->
+            True
+
+        h :: t ->
+            if h.number == 0 then
+                False
+            else if List.member h.number intList then
+                False
+            else
+                unique t (h.number :: intList)
+
+
+
+-----------------------------------------OnClick-------------------------------------------------
 
 
 sudokuClick : Int -> Int -> Sudoku -> Sudoku
-sudokuClick x y sudoku =
+sudokuClick x y s =
+    { s | sudoku = sudokuClick2 x y s.sudoku }
+
+
+sudokuClick2 : Int -> Int -> List Row -> List Row
+sudokuClick2 x y sudoku =
     case ( sudoku, y ) of
         ( [], _ ) ->
             sudoku
@@ -102,7 +187,7 @@ sudokuClick x y sudoku =
             rowClick x h :: t
 
         ( h :: t, i ) ->
-            h :: sudokuClick x (y - 1) t
+            h :: sudokuClick2 x (y - 1) t
 
 
 rowClick : Int -> Row -> Row
@@ -127,12 +212,12 @@ toggleClicked s =
 
 
 
--------------------------------------------------------------------------------------------------
+-------------------------------------OnKeyboardInput---------------------------------------------
 
 
 sudokuInput : Char -> Sudoku -> Sudoku
-sudokuInput code sudoku =
-    List.map (sudokuRowInput code) sudoku
+sudokuInput code s =
+    { s | sudoku = List.map (sudokuRowInput code) s.sudoku }
 
 
 sudokuRowInput code row =
@@ -200,7 +285,10 @@ subscriptions model =
 
 sudoku2Model : List (List Int) -> Sudoku
 sudoku2Model sudoku =
-    List.map list2row sudoku
+    { sudoku = List.map list2row sudoku
+    , checked = False
+    , correct = False
+    }
 
 
 list2row : List Int -> Row
