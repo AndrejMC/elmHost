@@ -5,6 +5,7 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Keyboard exposing (..)
+import Random
 
 
 css =
@@ -44,6 +45,11 @@ type Msg
     = Click Int Int
     | Presses Char
     | Check
+    | Reset
+    | Generate
+    | PrikaziResitev
+    | Namig
+    | GenStNamiga Int
 
 
 
@@ -54,8 +60,12 @@ view : Sudoku -> Html Msg
 view sudoku =
     Html.div []
         [ css
-        , List.indexedMap viewRow sudoku.sudoku |> Html.div [ style [ ( "width", "800px" ) ] ]
+        , List.indexedMap viewRow sudoku.sudoku |> Html.div [ style [ ( "width", "1600px" ) ] ]
         , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Check ] [ text "CHECK SOLUTION" ]
+        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Reset ] [ text "RESET" ]
+        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Generate ] [ text "GENERATE" ]
+        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick PrikaziResitev ] [ text "PRIKAZI RESITEV" ]
+        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Namig ] [ text "NAMIG" ]
         , Html.div
             [ style
                 [ ( "display"
@@ -112,6 +122,133 @@ update msg sudoku =
 
         Check ->
             ( { sudoku | checked = True, correct = checkSudoku sudoku.sudoku }, Cmd.none )
+
+        Reset ->
+            ( prvotniSudoku, Cmd.none )
+
+        Generate ->
+            ( sudoku, Cmd.none )
+
+        PrikaziResitev ->
+            ( prikaziResitev, Cmd.none )
+
+        Namig ->
+            ( sudoku, generirajNakljucnoVrednostZaNamig sudoku )
+
+        GenStNamiga i ->
+            ( generirajNamig sudoku prikaziResitev (generirajMozneNamige sudoku) i, Cmd.none )
+
+
+
+------------------------------------------Generating Namig------------------------------------------
+
+
+generirajNakljucnoVrednostZaNamig : Sudoku -> Cmd Msg
+generirajNakljucnoVrednostZaNamig sudoku =
+    Random.generate GenStNamiga (Random.int 0 (List.length (generirajMozneNamige sudoku)))
+
+
+generirajNamig : Sudoku -> Sudoku -> List ( number, number ) -> Int -> Sudoku
+generirajNamig sudoku resitev tuple i =
+    let
+        extractTuple : List ( number, number ) -> Int -> ( number, number )
+        extractTuple list index =
+            case list of
+                h :: t ->
+                    if index == 0 then
+                        h
+                    else
+                        extractTuple t (index - 1)
+
+                [] ->
+                    ( -1, -1 )
+
+        findNamig resitev y tuple =
+            case resitev of
+                h :: t ->
+                    if y == Tuple.second tuple then
+                        findRow h 0 y tuple
+                    else
+                        findNamig t (y + 1) tuple
+
+                [] ->
+                    sudoku
+
+        findRow list x y tuple =
+            case list of
+                h :: t ->
+                    if x == Tuple.first tuple then
+                        updateNamig sudoku.sudoku 0 x y [] h.number
+                    else
+                        findRow t (x + 1) y tuple
+
+                [] ->
+                    sudoku
+
+        updateNamig : List Row -> number -> number -> number -> List Row -> number -> { checked : Bool, correct : Bool, sudoku : List Row }
+        updateNamig splitSudoku y xR yR newSudoku value =
+            case splitSudoku of
+                h :: t ->
+                    if y == yR then
+                        { sudoku | sudoku = newSudoku ++ updateRow h 0 xR [] value :: t }
+                    else
+                        updateNamig t (y + 1) xR yR (newSudoku ++ [ h ]) value
+
+                [] ->
+                    sudoku
+
+        updateRow : List Square -> number -> number -> List Square -> Int -> List Square
+        updateRow row x xS newList value =
+            case row of
+                h :: t ->
+                    if x == xS then
+                        newList ++ [ Square value True False ] ++ t
+                    else
+                        updateRow t (x + 1) xS (newList ++ [ h ]) value
+
+                [] ->
+                    row
+    in
+    findNamig resitev.sudoku 0 (extractTuple tuple i)
+
+
+
+----Vzame sudoku in na podlagi vseh praznih polj sestavi array (x,y) koordinat, kamor lahko vpisemo stevilko----
+
+
+generirajMozneNamige : Sudoku -> List ( number, number )
+generirajMozneNamige sudoku =
+    let
+        lookForSquares row x y tuples =
+            case row of
+                h :: t ->
+                    if h.number == 0 then
+                        lookForSquares t (x + 1) y (( x, y ) :: tuples)
+                    else
+                        lookForSquares t (x + 1) y tuples
+
+                [] ->
+                    tuples
+
+        createTuples sudoku y tuples =
+            case sudoku of
+                h :: t ->
+                    createTuples t (y + 1) (lookForSquares h 0 y tuples)
+
+                [] ->
+                    tuples
+    in
+    createTuples sudoku.sudoku 0 []
+
+
+prvotniSudoku : Sudoku
+prvotniSudoku =
+    sudoku2Model (string2ListList sudoku)
+
+
+prikaziResitev : Sudoku
+prikaziResitev =
+    sudoku2Model (string2ListList resitevSudoka)
 
 
 
@@ -344,4 +481,8 @@ int2Square int =
 
 
 sudoku =
-    "010000000060000820002018000030080002000052080000401500000140000070000000120300006"
+    "000216007600479000000005000005002090090003270000000500400000000006300100970080050"
+
+
+resitevSudoka =
+    "358216947612479835749835621135762498894153276267948513483521769526397184971684352"
