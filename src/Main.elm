@@ -4,10 +4,17 @@ import Char exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import Http
+import Json.Decode exposing (field, string)
 import Keyboard exposing (..)
 import Random
+import Time exposing (Time, second)
 
 
+--import Timer
+
+
+css : Html msg
 css =
     node "link" [ rel "stylesheet", href "../style/style.css" ] []
 
@@ -34,6 +41,17 @@ type alias Sudoku =
     { sudoku : List Row
     , checked : Bool
     , correct : Bool
+
+    --extra dodano za zaklepanje gumbov in lazje preverjanje
+    , hint_Possible : Bool
+    , reset_Possible : Bool
+    , solution_Possilble : Bool
+    , sudokuTime : Int
+    , score : Int
+    , startSudoku : List Row
+    , resultSudoku : List Row
+    , correctSudoku : Bool
+    , difficulty : Int
     }
 
 
@@ -46,13 +64,16 @@ type Msg
     | Presses Char
     | Check
     | Reset
-    | Generate
+    | GetSudoku
     | PrikaziResitev
     | Namig
     | GenStNamiga Int
+    | Tick Time
+    | NewSudoku (Result.Result Http.Error String)
 
 
 
+--| Tick Time
 -------------------------------------------------------------------------------------------------
 
 
@@ -61,11 +82,14 @@ view sudoku =
     Html.div []
         [ css
         , List.indexedMap viewRow sudoku.sudoku |> Html.div [ style [ ( "width", "1600px" ) ] ]
-        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Check ] [ text "CHECK SOLUTION" ]
-        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Reset ] [ text "RESET" ]
-        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Generate ] [ text "GENERATE" ]
-        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick PrikaziResitev ] [ text "PRIKAZI RESITEV" ]
-        , Html.button [ style [ ( "background-color", "yellow" ), ( "padding", "15px 32px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick Namig ] [ text "NAMIG" ]
+        , Html.button [ style [ ( "background-color", "#f2f2f2" ), ( "padding", "15px 27px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], disabled (not sudoku.solution_Possilble || sudoku.correct), onClick Check ] [ text "CHECK SOLUTION" ]
+        , Html.button [ style [ ( "background-color", "#f2f2f2" ), ( "padding", "15px 27px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], disabled (not sudoku.reset_Possible), onClick Reset ] [ text "RESET" ]
+        , Html.button [ style [ ( "background-color", "#f2f2f2" ), ( "padding", "15px 27px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick GetSudoku ] [ text "GENERATE" ]
+        , Html.button [ style [ ( "background-color", "#f2f2f2" ), ( "padding", "15px 27px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], onClick PrikaziResitev ] [ text "PRIKAZI RESITEV" ]
+        , Html.button [ style [ ( "background-color", "#f2f2f2" ), ( "padding", "15px 27px" ), ( "font-size", "16px" ), ( "border-radius", "15px" ) ], disabled (not sudoku.hint_Possible), onClick Namig ]
+            [ text "NAMIG" ]
+        , Html.div [ style [ ( "padding", "15px 27px" ), ( "font-size", "24px" ) ] ] [ Html.text ("Current time: " ++ toString sudoku.sudokuTime) ]
+        , Html.div [ style [ ( "padding", "15px 27px" ), ( "font-size", "24px" ) ] ] [ Html.text ("Score: " ++ toString sudoku.score) ]
         , Html.div
             [ style
                 [ ( "display"
@@ -77,13 +101,14 @@ view sudoku =
                 ]
             ]
             [ if sudoku.correct then
-                Html.p [ style [ ( "color", "green" ) ] ] [ text "SOLUTION CORRECT" ]
+                Html.img [ style [ ( "padding", "2px 259px" ), ( "border-radius", "15px" ) ], width 200, height 100, src "../assets/correct.png" ] []
               else
-                Html.p [ style [ ( "color", "red" ) ] ] [ text "SOLUTION INCORRECT" ]
+                Html.img [ style [ ( "padding", "2px 259px" ), ( "border-radius", "15px" ) ], width 200, height 100, src "../assets/incorrect.png" ] []
             ]
         ]
 
 
+viewRow : Int -> List { a | clicked : Bool, disabled : Bool, number : number } -> Html Msg
 viewRow y row =
     let
         buildHTML el ak =
@@ -121,22 +146,80 @@ update msg sudoku =
             ( sudokuInput code sudoku, Cmd.none )
 
         Check ->
-            ( { sudoku | checked = True, correct = checkSudoku sudoku.sudoku }, Cmd.none )
+            ( checkIfCorrect sudoku, Cmd.none )
 
         Reset ->
-            ( prvotniSudoku, Cmd.none )
-
-        Generate ->
-            ( sudoku, Cmd.none )
+            ( returnSudokuToOrigin sudoku, Cmd.none )
 
         PrikaziResitev ->
-            ( prikaziResitev, Cmd.none )
+            ( prikaziResitev sudoku, Cmd.none )
 
         Namig ->
             ( sudoku, generirajNakljucnoVrednostZaNamig sudoku )
 
         GenStNamiga i ->
-            ( generirajNamig sudoku prikaziResitev (generirajMozneNamige sudoku) i, Cmd.none )
+            ( generirajNamig sudoku sudoku.resultSudoku (generirajMozneNamige sudoku) i, Cmd.none )
+
+        Tick time ->
+            ( { sudoku | sudokuTime = sudoku.sudokuTime + 1 }, Cmd.none )
+
+        GetSudoku ->
+            ( sudoku, loadSudoku )
+
+        NewSudoku (Ok s) ->
+            ( updateSudoku s sudoku, Cmd.none )
+
+        NewSudoku (Err _) ->
+            ( sudoku, Cmd.none )
+
+
+
+------------------------------------------API KLIC--------------------------------------------------
+
+
+updateSudoku s sudoku =
+    let
+        getSolution s =
+            String.dropLeft 81 s
+
+        getStart s =
+            String.dropRight 81 s
+
+        generateSudoku sudokuZac sudokuRes sudoku =
+            { sudoku
+                | sudoku = List.map list2row (string2ListList sudokuZac)
+                , checked = False
+                , correct = False
+                , hint_Possible = True
+                , reset_Possible = True
+                , solution_Possilble = True
+                , sudokuTime = 0
+                , score = sudoku.score
+                , startSudoku = List.map list2row (string2ListList sudokuZac)
+                , resultSudoku = List.map list2row (string2ListList sudokuRes)
+                , correctSudoku = False
+            }
+    in
+    generateSudoku (String.left 81 s) (String.right 81 s) sudoku
+
+
+loadSudoku =
+    Http.send NewSudoku (Http.get apiUrl (field "puzzle" string))
+
+
+apiUrl =
+    "https://sudoku-andrej834.c9users.io/medium"
+
+
+
+--------------------------------------------ADD SCORE----------------------------------------------
+
+
+checkIfCorrect sudoku =
+    if checkSudoku sudoku.sudoku then
+        { sudoku | checked = True, correct = True, score = sudoku.score + 500 * sudoku.difficulty - sudoku.sudokuTime }
+    else
+        { sudoku | checked = True, correct = False, score = sudoku.score }
 
 
 
@@ -148,7 +231,7 @@ generirajNakljucnoVrednostZaNamig sudoku =
     Random.generate GenStNamiga (Random.int 0 (List.length (generirajMozneNamige sudoku)))
 
 
-generirajNamig : Sudoku -> Sudoku -> List ( number, number ) -> Int -> Sudoku
+generirajNamig : Sudoku -> List Row -> List ( number, number ) -> Int -> Sudoku
 generirajNamig sudoku resitev tuple i =
     let
         extractTuple : List ( number, number ) -> Int -> ( number, number )
@@ -185,12 +268,12 @@ generirajNamig sudoku resitev tuple i =
                 [] ->
                     sudoku
 
-        updateNamig : List Row -> number -> number -> number -> List Row -> number -> { checked : Bool, correct : Bool, sudoku : List Row }
+        updateNamig : List Row -> number -> number -> number -> List Row -> number -> { checked : Bool, correct : Bool, sudoku : List Row, hint_Possible : Bool, reset_Possible : Bool, solution_Possilble : Bool, sudokuTime : Int, score : Int, startSudoku : List Row, resultSudoku : List Row, correctSudoku : Bool, difficulty : Int }
         updateNamig splitSudoku y xR yR newSudoku value =
             case splitSudoku of
                 h :: t ->
                     if y == yR then
-                        { sudoku | sudoku = newSudoku ++ updateRow h 0 xR [] value :: t }
+                        { sudoku | sudoku = newSudoku ++ updateRow h 0 xR [] value :: t, hint_Possible = False }
                     else
                         updateNamig t (y + 1) xR yR (newSudoku ++ [ h ]) value
 
@@ -209,7 +292,7 @@ generirajNamig sudoku resitev tuple i =
                 [] ->
                     row
     in
-    findNamig resitev.sudoku 0 (extractTuple tuple i)
+    findNamig resitev 0 (extractTuple tuple i)
 
 
 
@@ -241,14 +324,33 @@ generirajMozneNamige sudoku =
     createTuples sudoku.sudoku 0 []
 
 
+
+------------------------------------------HELPER-------------------------------------------------
+
+
+returnSudokuToOrigin : { e | checked : a, correct : b, startSudoku : c, sudoku : d } -> { e | startSudoku : c, checked : Bool, correct : Bool, sudoku : c }
+returnSudokuToOrigin sudoku =
+    { sudoku
+        | sudoku = sudoku.startSudoku
+        , checked = False
+        , correct = False
+    }
+
+
 prvotniSudoku : Sudoku
 prvotniSudoku =
     sudoku2Model (string2ListList sudoku)
 
 
-prikaziResitev : Sudoku
-prikaziResitev =
-    sudoku2Model (string2ListList resitevSudoka)
+prikaziResitev : { g | checked : a, correct : b, reset_Possible : c, resultSudoku : d, solution_Possilble : e, sudoku : f } -> { g | resultSudoku : d, checked : Bool, correct : Bool, reset_Possible : Bool, solution_Possilble : Bool, sudoku : d }
+prikaziResitev sudoku =
+    { sudoku
+        | sudoku = sudoku.resultSudoku
+        , checked = False
+        , correct = False
+        , reset_Possible = False
+        , solution_Possilble = False
+    }
 
 
 
@@ -381,10 +483,12 @@ sudokuInput code s =
     { s | sudoku = List.map (sudokuRowInput code) s.sudoku }
 
 
+sudokuRowInput : Char -> List { a | clicked : Bool, number : number } -> List { a | clicked : Bool, number : number }
 sudokuRowInput code row =
     List.map (sudokuSquareInput code) row
 
 
+sudokuSquareInput : Char -> { a | clicked : Bool, number : number } -> { a | clicked : Bool, number : number }
 sudokuSquareInput code sq =
     case sq.clicked of
         False ->
@@ -427,6 +531,7 @@ sudokuSquareInput code sq =
 -------------------------------------------------------------------------------------------------
 
 
+main : Program Never Sudoku Msg
 main =
     Html.program { init = ( sudoku2Model (string2ListList sudoku), Cmd.none ), view = view, update = update, subscriptions = subscriptions }
 
@@ -437,7 +542,10 @@ main =
 
 subscriptions : Sudoku -> Sub Msg
 subscriptions model =
-    Keyboard.presses (\code -> Presses (fromCode code))
+    Sub.batch
+        [ Keyboard.presses (\code -> Presses (fromCode code))
+        , Time.every second Tick
+        ]
 
 
 
@@ -467,6 +575,15 @@ sudoku2Model sudoku =
     { sudoku = List.map list2row sudoku
     , checked = False
     , correct = False
+    , hint_Possible = True
+    , reset_Possible = True
+    , solution_Possilble = True
+    , sudokuTime = 0
+    , score = 0
+    , startSudoku = List.map list2row sudoku
+    , resultSudoku = List.map list2row (string2ListList resitevSudoka)
+    , correctSudoku = False
+    , difficulty = 1
     }
 
 
@@ -480,9 +597,15 @@ int2Square int =
     { number = int, disabled = int /= 0, clicked = False }
 
 
+sudoku : String
 sudoku =
-    "000216007600479000000005000005002090090003270000000500400000000006300100970080050"
+    "358216947612479835749835621135762498894153276267948513483521769526397184971684350"
 
 
+
+--000216007600479000000005000005002090090003270000000500400000000006300100970080050
+
+
+resitevSudoka : String
 resitevSudoka =
     "358216947612479835749835621135762498894153276267948513483521769526397184971684352"
