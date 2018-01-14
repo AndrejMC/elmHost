@@ -73,7 +73,6 @@ type Msg
 
 
 
---| Tick Time
 -------------------------------------------------------------------------------------------------
 
 
@@ -164,7 +163,7 @@ update msg sudoku =
             ( { sudoku | sudokuTime = sudoku.sudokuTime + 1 }, Cmd.none )
 
         GetSudoku ->
-            ( sudoku, loadSudoku )
+            ( sudoku, loadSudoku sudoku )
 
         NewSudoku (Ok s) ->
             ( updateSudoku s sudoku, Cmd.none )
@@ -177,14 +176,9 @@ update msg sudoku =
 ------------------------------------------API KLIC--------------------------------------------------
 
 
+updateSudoku : String -> { l | checked : b, correct : c, correctSudoku : d, hint_Possible : e, reset_Possible : f, resultSudoku : g, solution_Possilble : h, startSudoku : i, sudoku : j, sudokuTime : k, score : a, difficulty : Int } -> { l | checked : Bool, correct : Bool, correctSudoku : Bool, hint_Possible : Bool, reset_Possible : Bool, resultSudoku : List Row, score : a, solution_Possilble : Bool, startSudoku : List Row, sudoku : List Row, sudokuTime : number, difficulty : Int }
 updateSudoku s sudoku =
     let
-        getSolution s =
-            String.dropLeft 81 s
-
-        getStart s =
-            String.dropRight 81 s
-
         generateSudoku sudokuZac sudokuRes sudoku =
             { sudoku
                 | sudoku = List.map list2row (string2ListList sudokuZac)
@@ -198,23 +192,45 @@ updateSudoku s sudoku =
                 , startSudoku = List.map list2row (string2ListList sudokuZac)
                 , resultSudoku = List.map list2row (string2ListList sudokuRes)
                 , correctSudoku = False
+                , difficulty = sudoku.difficulty % 3 + 1
             }
     in
     generateSudoku (String.left 81 s) (String.right 81 s) sudoku
 
 
-loadSudoku =
-    Http.send NewSudoku (Http.get apiUrl (field "puzzle" string))
+loadSudoku : Sudoku -> Cmd Msg
+loadSudoku sudoku =
+    field "puzzle" string |> Http.get (apiUrl sudoku.difficulty) |> Http.send NewSudoku
 
 
-apiUrl =
-    "https://sudoku-andrej834.c9users.io/medium"
+apiUrl : Int -> String
+apiUrl diff =
+    "https://sudoku-andrej834.c9users.io/" ++ toString (randomDifficulty (diff % 3 + 1) sudokuDifficulty)
+
+
+sudokuDifficulty : List String
+sudokuDifficulty =
+    [ "easy", "medium", "hard" ]
+
+
+randomDifficulty : Int -> List String -> String
+randomDifficulty diff list =
+    case list of
+        h :: t ->
+            if diff == 0 then
+                h
+            else
+                randomDifficulty (diff - 1) t
+
+        _ ->
+            "default"
 
 
 
 --------------------------------------------ADD SCORE----------------------------------------------
 
 
+checkIfCorrect : { c | checked : a, correct : b, difficulty : number, sudoku : List Row, sudokuTime : number, score : number } -> { c | checked : Bool, correct : Bool, difficulty : number, score : number, sudoku : List Row, sudokuTime : number }
 checkIfCorrect sudoku =
     if checkSudoku sudoku.sudoku then
         { sudoku | checked = True, correct = True, score = sudoku.score + 500 * sudoku.difficulty - sudoku.sudokuTime }
@@ -234,14 +250,11 @@ generirajNakljucnoVrednostZaNamig sudoku =
 generirajNamig : Sudoku -> List Row -> List ( number, number ) -> Int -> Sudoku
 generirajNamig sudoku resitev tuple i =
     let
-        extractTuple : List ( number, number ) -> Int -> ( number, number )
-        extractTuple list index =
+        extractTuple : List ( number, number ) -> ( number, number )
+        extractTuple list =
             case list of
                 h :: t ->
-                    if index == 0 then
-                        h
-                    else
-                        extractTuple t (index - 1)
+                    h
 
                 [] ->
                     ( -1, -1 )
@@ -268,7 +281,6 @@ generirajNamig sudoku resitev tuple i =
                 [] ->
                     sudoku
 
-        updateNamig : List Row -> number -> number -> number -> List Row -> number -> { checked : Bool, correct : Bool, sudoku : List Row, hint_Possible : Bool, reset_Possible : Bool, solution_Possilble : Bool, sudokuTime : Int, score : Int, startSudoku : List Row, resultSudoku : List Row, correctSudoku : Bool, difficulty : Int }
         updateNamig splitSudoku y xR yR newSudoku value =
             case splitSudoku of
                 h :: t ->
@@ -280,7 +292,6 @@ generirajNamig sudoku resitev tuple i =
                 [] ->
                     sudoku
 
-        updateRow : List Square -> number -> number -> List Square -> Int -> List Square
         updateRow row x xS newList value =
             case row of
                 h :: t ->
@@ -292,7 +303,7 @@ generirajNamig sudoku resitev tuple i =
                 [] ->
                     row
     in
-    findNamig resitev 0 (extractTuple tuple i)
+    List.drop i tuple |> extractTuple |> findNamig resitev 0
 
 
 
@@ -316,7 +327,7 @@ generirajMozneNamige sudoku =
         createTuples sudoku y tuples =
             case sudoku of
                 h :: t ->
-                    createTuples t (y + 1) (lookForSquares h 0 y tuples)
+                    lookForSquares h 0 y tuples |> createTuples t (y + 1)
 
                 [] ->
                     tuples
@@ -335,11 +346,6 @@ returnSudokuToOrigin sudoku =
         , checked = False
         , correct = False
     }
-
-
-prvotniSudoku : Sudoku
-prvotniSudoku =
-    sudoku2Model (string2ListList sudoku)
 
 
 prikaziResitev : { g | checked : a, correct : b, reset_Possible : c, resultSudoku : d, solution_Possilble : e, sudoku : f } -> { g | resultSudoku : d, checked : Bool, correct : Bool, reset_Possible : Bool, solution_Possilble : Bool, sudoku : d }
@@ -599,11 +605,7 @@ int2Square int =
 
 sudoku : String
 sudoku =
-    "358216947612479835749835621135762498894153276267948513483521769526397184971684350"
-
-
-
---000216007600479000000005000005002090090003270000000500400000000006300100970080050
+    "000216007600479000000005000005002090090003270000000500400000000006300100970080050"
 
 
 resitevSudoka : String
