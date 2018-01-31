@@ -100,9 +100,9 @@ view sudoku =
                 ]
             ]
             [ if sudoku.correct then
-                Html.img [ style [ ( "padding", "2px 259px" ), ( "border-radius", "15px" ) ], width 200, height 100, src "../assets/correct.png" ] []
+                Html.img [ style [ ( "padding", "2px 259px" ), ( "border-radius", "15px" ) ], width 200, height 100, src "./assets/correct.png" ] []
               else
-                Html.img [ style [ ( "padding", "2px 259px" ), ( "border-radius", "15px" ) ], width 200, height 100, src "../assets/incorrect.png" ] []
+                Html.img [ style [ ( "padding", "2px 259px" ), ( "border-radius", "15px" ) ], width 200, height 100, src "./assets/incorrect.png" ] []
             ]
         ]
 
